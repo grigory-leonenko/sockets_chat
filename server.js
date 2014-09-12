@@ -1,13 +1,15 @@
 var http = require('http');
 var sockjs = require('sockjs');
-
+var handler_service = require('./handlers');
 var socket = sockjs.createServer();
 var clients = {};
-var _handlers = new handlerService();
+var _handlers = new handler_service();
+
+console.log(handler_service)
 
 socket.on('connection', function(conn) {
 
-    clients[conn.id] = {connection: conn, subscriptions: {}, user: {}};
+    clients[conn.id] = {connection: conn, id: conn.id, subscriptions: {}, user: {}};
 
     conn.on('data', function(data) {
         var _data = JSON.parse(data);
@@ -31,25 +33,31 @@ socket.on('connection', function(conn) {
 
 
 
-_handlers.registerHandler('REGISTER_USER', function(params, id){
-    if(id && params.name){
-        clients[id].name = params.name;
-        write(id, {event: 'REGISTER_SUCCEED', data: {name: params.name}})
+_handlers.registerHandler('REGISTER_USER', function(params, client){
+    if(client && params.name){
+        client.name = params.name;
+        write(client, {event: 'REGISTER_SUCCEED', data: {name: params.name}});
+        for(var i in clients){
+            var _client = clients[i];
+            if(_client.name && _client.subscriptions['USER_LIST']) _handlers.emitHandler('USER_LIST', null, _client);
+        };
     };
 });
 
-_handlers.registerHandler('GET_USER_LIST', function(params, id){
-    if(id){
+_handlers.registerHandler('USER_LIST', function(params, client){
+    if(client){
         var _users = []
         for(var i in clients){
-            if(i != id && clients[i].name){
+            console.log('client id', i, client.id)
+            var _client = clients[i];
+            if(i != client.id && _client.name){
                 _users.push({
-                    name: clients[i].name,
-                    id: id
+                    name: _client.name,
+                    id: _client.id
                 })
             };
         };
-        write(id, {event: 'USER_LIST', data: _users})
+        write(client, {event: 'USER_LIST', data: _users})
     };
 });
 
@@ -60,29 +68,10 @@ _handlers.registerHandler('ADD_MESSAGE', function(params, id){
     };
 });
 
-function write(id, message){
-    clients[id].connection.write(JSON.stringify(message));
+function write(client, message){
+    client.connection.write(JSON.stringify(message));
 };
 
-function handlerService(){
-    this.handlers = {};
-};
-
-handlerService.prototype.registerHandler = function(name, fn){
-    if(this.handlers[name]){
-        console.error('Handler already registered for:', name);
-    } else {
-        this.handlers[name] = fn;
-    };
-};
-
-handlerService.prototype.emitHandler = function(name, data, client){
-    if(this.handlers[name]){
-        this.handlers[name](data, client)
-    } else {
-        console.error('No handler for:', name)
-    };
-};
 
 var server = http.createServer();
 socket.installHandlers(server, {prefix:'/echo'});
