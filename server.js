@@ -19,15 +19,14 @@ socket.on('connection', function(conn) {
 
     conn.on('data', function(data) {
         var _data = JSON.parse(data);
-        switch (_data.method){
-            case 'write':
-                _handlers.emitHandler(_data.model, _data.data, _session);
-        };
+        console.log(_data);
+        _handlers.emitHandler(_data.model, _data.data, _session);
     });
 
     conn.on('close', function() {
         storage.$delete('sessions', conn.id);
         storage.$delete('users', conn.id);
+        generateUserList();
     });
 
 });
@@ -36,23 +35,24 @@ socket.on('connection', function(conn) {
 
 _handlers.registerHandler('user', function(data, client){
       storage.$write('users', client.id, {name: data.name, id: client.id, auth: true});
-      write(client, 'user', storage.$read('users', client.id))
-      storage.$map('sessions', function(client, clientId){
-          var _users = [];
-          storage.$map('users', function(user, userId){
-              if(userId != clientId){
-                  _users.push(user);
-              };
-          });
-          write(client, 'users', _users);
-      });
+      write(client, 'user', storage.$read('users', client.id));
+      generateUserList();
 });
 
-_handlers.registerHandler('message', function(params, id){
-    if(params.id && params.message){
-        write(id, {event: 'MESSAGE_ADDED', message: params.message})
-        write(params.id, {event: 'MESSAGE_ADDED', message: params.message, id: id})
-    };
+function generateUserList(){
+    storage.$map('sessions', function(client, clientId){
+        var _users = [];
+        storage.$map('users', function(user, userId){
+            if(userId != clientId){
+                _users.push(user);
+            };
+        });
+        write(client, 'users', _users);
+    });
+};
+
+_handlers.registerHandler('message', function(data, client){
+    write(storage.$read('sessions', data.userId), 'message', {text: data.text, userId: client.id});
 });
 
 function write(client, storage, data){
