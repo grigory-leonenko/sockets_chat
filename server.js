@@ -43,7 +43,7 @@ function generateUserList(){
     storage.$map('sessions', function(client, clientId){
         var _users = [];
         storage.$map('users', function(user, userId){
-            if(userId != clientId){
+            if(userId != clientId && user.auth){
                 _users.push(user);
             };
         });
@@ -52,10 +52,12 @@ function generateUserList(){
 };
 
 _handlers.registerHandler('message', function(data, client){
-    write(storage.$read('sessions', data.userId), 'message', {text: data.text, userId: client.id});
+    write(client, 'message', {text: data.text, clientId: data.userId, user: storage.$read('users', client.id)});
+    write(storage.$read('sessions', data.userId), 'message', {text: data.text, clientId: client.id, user: storage.$read('users', client.id)});
 });
 
 function write(client, storage, data){
+    console.log(client.id, storage, data)
     client.connection.write(JSON.stringify({model: storage, data: data}));
 };
 
