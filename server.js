@@ -19,46 +19,103 @@ socket.on('connection', function(conn) {
 
     conn.on('data', function(data) {
         var _data = JSON.parse(data);
-        console.log(_data);
         _handlers.emitHandler(_data.model, _data.data, _session);
     });
 
     conn.on('close', function() {
         storage.$delete('sessions', conn.id);
         storage.$delete('users', conn.id);
-        generateUserList();
+        clearChats(conn.id);
     });
 
 });
+
+var guid = (function() {
+    function s4() {
+        return Math.floor((1 + Math.random()) * 0x10000)
+            .toString(16)
+            .substring(1);
+    }
+    return function() {
+        return s4() + s4() + '-' + s4() + '-' + s4() + '-' +
+            s4() + '-' + s4() + s4() + s4();
+    };
+})();
+
+
 
 
 
 _handlers.registerHandler('user', function(data, client){
-      storage.$write('users', client.id, {name: data.name, id: client.id, auth: true});
-      write(client, 'user', storage.$read('users', client.id));
-      generateUserList();
+    var _user = {name: data.name, id: client.id, auth: true};
+    storage.$write('users', client.id, _user);
+    write(client, 'user', _user);
+    generateChatsForUser(_user)
 });
 
-function generateUserList(){
-    storage.$map('sessions', function(client, clientId){
-        var _users = [];
-        storage.$map('users', function(user, userId){
-            if(userId != clientId && user.auth){
-                _users.push(user);
+_handlers.registerHandler('chat', function(data, client){
+      if(data.id){
+          var _id = data.id;
+      } else {
+          var _id = guid();
+      }
+      storage.$write('chats', _id, {id: _id, users: data.users});
+      sendChatList();
+});
+
+function generateChatsForUser(client){
+    storage.$map('users', function(user, userId){
+        if(userId == client.id || !user.auth) return;
+        var _chat = {id: guid(), users: {}};
+        _chat['users'][client.id] = client;
+        _chat['users'][user.id] = user;
+        storage.$write('chats', _chat.id, _chat);
+    });
+    sendChatList();
+};
+
+function clearChats(clientId){
+    storage.$map('chats', function(chat, chatId){
+        if(chat['users'][clientId]){
+            if(Object.keys(chat['users']).length < 4){
+                storage.$delete('chats', chatId);
+            } else {
+                delete chat['users'][clientId];
             };
-        });
-        write(client, 'users', _users);
+        };
+    });
+    sendChatList();
+};
+
+function sendChatList(){
+    console.log(storage.$read('chats'));
+    storage.$map('sessions', function(client, clientId){
+        var _chats = [];
+        storage.$map('chats', function(chat, chatId){
+            if(chat['users'][clientId]){
+                _chats.push(chat);
+            };
+        })
+        write(client, 'chats', _chats);
     });
 };
 
 _handlers.registerHandler('message', function(data, client){
-    write(client, 'message', {text: data.text, clientId: data.userId, user: storage.$read('users', client.id)});
-    write(storage.$read('sessions', data.userId), 'message', {text: data.text, clientId: client.id, user: storage.$read('users', client.id)});
+    var _chat = storage.$read('chats', data.chatId);
+    console.log(_chat)
+    mapObject(_chat.users, function(user, userId){
+        write(storage.$read('sessions', userId), 'message', {text: data.text, chatId: data.chatId, user: storage.$read('users', client.id)});
+    });
 });
 
 function write(client, storage, data){
-    console.log(client.id, storage, data)
     client.connection.write(JSON.stringify({model: storage, data: data}));
+};
+
+function mapObject(obj, fn){
+    Object.keys(obj).map(function(key){
+        fn(obj[key],key);
+    });
 };
 
 

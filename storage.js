@@ -8,12 +8,28 @@ data.prototype.$write = function(storage, key, data){
 };
 
 data.prototype.$read = function(storage, key){
-    return this.data[storage][key];
+    if(storage == 'chats'){
+        console.log(this.data[storage], key)
+    }
+    if(key){
+        return this.data[storage][key];
+    } else {
+        return this.data[storage]
+    };
 };
 
 data.prototype.$delete = function(storage, key){
+    console.log(storage, key);
     delete  this.data[storage][key];
 }
+
+data.prototype.$keys = function(storage){
+    if(!this.data[storage]) return 'empty storage';
+
+    return Object.keys(this.data[storage]).map(function(key){
+        return key;
+    });
+};
 
 data.prototype.$map = function(storage, fn){
     var _collection = this.data[storage];
