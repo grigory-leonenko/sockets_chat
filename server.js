@@ -66,7 +66,7 @@ _handlers.registerHandler('chat', function(data, client){
 function generateChatsForUser(client){
     storage.$map('users', function(user, userId){
         if(userId == client.id || !user.auth) return;
-        var _chat = {id: guid(), users: {}};
+        var _chat = {id: guid(), name: user.name, users: {}};
         _chat['users'][client.id] = client;
         _chat['users'][user.id] = user;
         storage.$write('chats', _chat.id, _chat);
